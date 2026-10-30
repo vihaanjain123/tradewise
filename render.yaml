@@ -1,0 +1,25 @@
+# Render Blueprint — tells Render how to run TradeWise (New → Blueprint → pick this repo)
+services:
+  - type: web
+    name: tradewise
+    runtime: python
+    plan: free
+    region: singapore              # closest Render region to India
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn tradewise:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY            # signs login cookies — Render makes a random one
+        generateValue: true
+      - key: CRON_SECRET           # password for the /cron/tick link — Render makes a random one
+        generateValue: true
+      - key: DATABASE_URL          # paste your Neon connection string
+        sync: false
+      - key: BREVO_API_KEY         # paste your Brevo API key
+        sync: false
+      - key: MAIL_FROM             # the email address you verified in Brevo
+        sync: false
+      - key: ADMIN_EMAIL           # your TradeWise login email (lets you reset the algorithm account)
+        sync: false
