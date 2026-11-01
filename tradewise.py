@@ -7,7 +7,7 @@ Run online (Render):    gunicorn tradewise:app    (see README.md → "Put it onl
 
 Pages
   /                 Dashboard   — NIFTY 50 signal, plain-English reasons, chart, history, trade panel
-  /stocks           Scanner     — 11 Indian equities, technical + fundamental, filter by signal
+  /stocks           Scanner     — 100 Indian companies (NIFTY 100 + watchlist): search, sector, sort, signal filters
   /stock/<ticker>   Stock page  — full chart with 3M / 6M projections + trade panel
   /practice         Practice    — your own virtual ₹1,00,000 portfolio + the algorithm's auto account
   /learn            Learn       — every term on the site explained simply
@@ -80,15 +80,69 @@ WATCHLIST = {                     # Dad's picks
     "ICICIBANK.NS": "ICICI Bank",
     "APLAPOLLO.NS": "APL Apollo",
 }
-POPULAR = {                       # well-known large companies to practise with
-    "RELIANCE.NS": "Reliance Industries",
-    "TCS.NS": "Tata Consultancy Services",
-    "HDFCBANK.NS": "HDFC Bank",
-    "INFY.NS": "Infosys",
-    "ITC.NS": "ITC",
-    "BHARTIARTL.NS": "Bharti Airtel",
+# India's 100 biggest companies = the NIFTY 100 index (constituents as of 30 Oct 2026).
+# ICICI Bank is in both lists, so Watchlist (5) + these (95) = 100 companies.
+TOP = {
+    # Banks
+    "HDFCBANK.NS": "HDFC Bank", "SBIN.NS": "State Bank of India", "KOTAKBANK.NS": "Kotak Mahindra Bank",
+    "AXISBANK.NS": "Axis Bank", "BANKBARODA.NS": "Bank of Baroda", "PNB.NS": "Punjab National Bank",
+    "CANBK.NS": "Canara Bank", "UNIONBANK.NS": "Union Bank of India",
+    # Finance & insurance
+    "BAJFINANCE.NS": "Bajaj Finance", "BAJAJFINSV.NS": "Bajaj Finserv", "BAJAJHLDNG.NS": "Bajaj Holdings",
+    "JIOFIN.NS": "Jio Financial Services", "SHRIRAMFIN.NS": "Shriram Finance", "CHOLAFIN.NS": "Cholamandalam Finance",
+    "MUTHOOTFIN.NS": "Muthoot Finance", "TATACAP.NS": "Tata Capital", "PFC.NS": "Power Finance Corp",
+    "IRFC.NS": "Indian Railway Finance Corp", "HDFCLIFE.NS": "HDFC Life", "SBILIFE.NS": "SBI Life Insurance",
+    "HDFCAMC.NS": "HDFC Asset Management", "BSE.NS": "BSE Ltd",
+    # IT
+    "TCS.NS": "Tata Consultancy Services", "INFY.NS": "Infosys", "HCLTECH.NS": "HCL Technologies",
+    "WIPRO.NS": "Wipro", "TECHM.NS": "Tech Mahindra", "LTM.NS": "LTM (LTIMindtree)",
+    # Energy, oil & power
+    "RELIANCE.NS": "Reliance Industries", "ONGC.NS": "ONGC", "IOC.NS": "Indian Oil", "BPCL.NS": "Bharat Petroleum",
+    "GAIL.NS": "GAIL", "NTPC.NS": "NTPC", "POWERGRID.NS": "Power Grid", "TATAPOWER.NS": "Tata Power",
+    "ADANIPOWER.NS": "Adani Power", "ADANIGREEN.NS": "Adani Green Energy", "ADANIENSOL.NS": "Adani Energy Solutions",
+    "COALINDIA.NS": "Coal India",
+    # Autos
+    "MARUTI.NS": "Maruti Suzuki", "M&M.NS": "Mahindra & Mahindra", "TMPV.NS": "Tata Motors (Passenger Vehicles)",
+    "HYUNDAI.NS": "Hyundai Motor India", "BAJAJ-AUTO.NS": "Bajaj Auto", "EICHERMOT.NS": "Eicher Motors",
+    "TVSMOTOR.NS": "TVS Motor", "MOTHERSON.NS": "Samvardhana Motherson", "BOSCHLTD.NS": "Bosch",
+    # Consumer
+    "ITC.NS": "ITC", "HINDUNILVR.NS": "Hindustan Unilever", "BRITANNIA.NS": "Britannia", "TATACONSUM.NS": "Tata Consumer",
+    "GODREJCP.NS": "Godrej Consumer", "VBL.NS": "Varun Beverages", "ASIANPAINT.NS": "Asian Paints",
+    "PIDILITIND.NS": "Pidilite", "TITAN.NS": "Titan", "TRENT.NS": "Trent", "DMART.NS": "Avenue Supermarts (DMart)",
+    "ETERNAL.NS": "Eternal (Zomato)",
+    # Pharma & healthcare
+    "SUNPHARMA.NS": "Sun Pharma", "CIPLA.NS": "Cipla", "DRREDDY.NS": "Dr Reddy's", "DIVISLAB.NS": "Divi's Labs",
+    "TORNTPHARM.NS": "Torrent Pharma", "ZYDUSLIFE.NS": "Zydus Lifesciences", "APOLLOHOSP.NS": "Apollo Hospitals",
+    "MAXHEALTH.NS": "Max Healthcare",
+    # Metals & mining
+    "TATASTEEL.NS": "Tata Steel", "JSWSTEEL.NS": "JSW Steel", "JINDALSTEL.NS": "Jindal Steel", "HINDALCO.NS": "Hindalco",
+    "VEDL.NS": "Vedanta", "HINDZINC.NS": "Hindustan Zinc",
+    # Industrials, defence & infrastructure
+    "LT.NS": "Larsen & Toubro", "HAL.NS": "Hindustan Aeronautics", "BEL.NS": "Bharat Electronics",
+    "MAZDOCK.NS": "Mazagon Dock", "SOLARINDS.NS": "Solar Industries", "SIEMENS.NS": "Siemens", "ABB.NS": "ABB India",
+    "POWERINDIA.NS": "Hitachi Energy India", "CGPOWER.NS": "CG Power", "CUMMINSIND.NS": "Cummins India",
+    "POLYCAB.NS": "Polycab", "ADANIENT.NS": "Adani Enterprises", "ADANIPORTS.NS": "Adani Ports",
+    "ULTRACEMCO.NS": "UltraTech Cement", "AMBUJACEM.NS": "Ambuja Cements", "GRASIM.NS": "Grasim", "DLF.NS": "DLF",
+    # Telecom & travel
+    "BHARTIARTL.NS": "Bharti Airtel", "IDEA.NS": "Vodafone Idea", "INDIGO.NS": "InterGlobe Aviation (IndiGo)",
 }
-STOCKS = {**WATCHLIST, **POPULAR}
+_SECTORS = {
+    "Banks": "HDFCBANK SBIN KOTAKBANK AXISBANK BANKBARODA PNB CANBK UNIONBANK ICICIBANK",
+    "Finance": "BAJFINANCE BAJAJFINSV BAJAJHLDNG JIOFIN SHRIRAMFIN CHOLAFIN MUTHOOTFIN TATACAP PFC IRFC HDFCLIFE SBILIFE HDFCAMC BSE",
+    "IT": "TCS INFY HCLTECH WIPRO TECHM LTM",
+    "Energy & Power": "RELIANCE ONGC IOC BPCL GAIL NTPC POWERGRID TATAPOWER ADANIPOWER ADANIGREEN ADANIENSOL COALINDIA",
+    "Autos": "MARUTI M&M TMPV HYUNDAI BAJAJ-AUTO EICHERMOT TVSMOTOR MOTHERSON BOSCHLTD NRBBEARING",
+    "Consumer": "ITC HINDUNILVR BRITANNIA TATACONSUM GODREJCP VBL ASIANPAINT PIDILITIND TITAN TRENT DMART ETERNAL TI",
+    "Pharma & Health": "SUNPHARMA CIPLA DRREDDY DIVISLAB TORNTPHARM ZYDUSLIFE APOLLOHOSP MAXHEALTH LAURUSLABS",
+    "Metals": "TATASTEEL JSWSTEEL JINDALSTEL HINDALCO VEDL HINDZINC APLAPOLLO",
+    "Industrials": "LT HAL BEL MAZDOCK SOLARINDS SIEMENS ABB POWERINDIA CGPOWER CUMMINSIND POLYCAB ADANIENT ADANIPORTS ULTRACEMCO AMBUJACEM GRASIM DLF",
+    "Telecom & Travel": "BHARTIARTL IDEA INDIGO",
+}
+SECTOR = {f"{sym}.NS": sector for sector, syms in _SECTORS.items() for sym in syms.split()}
+POPULAR = TOP                     # older name, kept so nothing else breaks
+STOCKS = {**WATCHLIST, **TOP}
+# A short list for the "start here" buttons (100 buttons would be too many)
+FEATURED = {**WATCHLIST, **{t: TOP[t] for t in ("RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "ITC.NS", "BHARTIARTL.NS")}}
 TRADABLE = {"^NSEI": "NIFTY 50", **STOCKS}
 
 # Each person's email preferences (the sending account itself is set by the site owner — see send_email)
@@ -186,6 +240,44 @@ def fetch(ticker, period, interval):
         df, live = _sample_data(ticker, period, interval), False
     _cache[key] = (time.time(), df, live)
     return df, live
+
+
+_missing = {}                       # ticker → time Yahoo said it has no data (renamed/delisted)
+
+
+def prefetch_daily(tickers):
+    """Download a year of daily prices for many stocks in ONE batch, instead of 100 separate requests."""
+    need = [t for t in tickers if not ((h := _cache.get((t, "1y", "1d"))) and time.time() - h[0] < CACHE_SECONDS)]
+    if not need:
+        return
+    try:
+        with yf_lock:
+            raw = yf.download(need, period="1y", interval="1d", group_by="ticker", auto_adjust=False,
+                              threads=True, progress=False)
+    except Exception as e:
+        print(f"[data] batch download failed ({e})")
+        raw = None
+    got, missing = 0, []
+    for t in need:
+        try:
+            df = _clean(raw[t].copy()) if raw is not None and t in raw.columns.get_level_values(0) else pd.DataFrame()
+        except Exception:
+            df = pd.DataFrame()
+        if len(df) >= 30:
+            _cache[(t, "1y", "1d")] = (time.time(), df, True)
+            _missing.pop(t, None)
+            got += 1
+        else:
+            missing.append(t)
+    if got == 0:                    # Yahoo unreachable: show labelled sample data, don't hammer it 100 more times
+        print(f"[data] Yahoo returned nothing for {len(need)} stocks — using sample data")
+        for t in need:
+            _cache[(t, "1y", "1d")] = (time.time(), _sample_data(t, "1y", "1d"), False)
+    else:                           # Yahoo works, but these few had no data (e.g. a renamed company)
+        for t in missing:
+            _missing[t] = time.time()
+        if missing:
+            print(f"[data] no data for: {', '.join(missing)}")
 
 
 def fetch_info(ticker):
@@ -384,7 +476,10 @@ def nifty_chart():
 # ════════════════════════════════════════════════════════════════
 # STOCK SCANNER
 # ════════════════════════════════════════════════════════════════
-def analyse_stock(ticker):
+def analyse_stock(ticker, with_info=True):
+    """with_info=False skips the slow 'business numbers' request — used by the 100-stock scanner."""
+    if not with_info and time.time() - _missing.get(ticker, 0) < CACHE_SECONDS:
+        raise ValueError("Yahoo Finance has no recent data for this stock")
     df, live = fetch(ticker, "1y", "1d")
     df = df.copy()
     c = df["Close"]
@@ -416,7 +511,7 @@ def analyse_stock(ticker):
                 "low": round(price * math.exp(mu * n - sd * math.sqrt(n)), 2),
                 "high": round(price * math.exp(mu * n + sd * math.sqrt(n)), 2)}
 
-    info = fetch_info(ticker)
+    info = fetch_info(ticker) if with_info else {}
     num = lambda k: info.get(k) if isinstance(info.get(k), (int, float)) else None
     pct = lambda k: r2(num(k) * 100) if num(k) is not None else None
     f = {
@@ -450,8 +545,10 @@ def analyse_stock(ticker):
 
     year = df.iloc[-250:]
     prev = r2(df["Close"].iloc[-2])
+    back = lambda n: round((price / float(c.iloc[-n - 1]) - 1) * 100, 1) if len(c) > n else None
     return {
         "ticker": ticker, "name": STOCKS[ticker], "key": key, "price": price, "live": live, "error": False,
+        "sector": SECTOR.get(ticker, "Other"), "m1": back(21), "m3": back(63),
         "chg_pct": round((price / prev - 1) * 100, 2) if prev else 0,
         "ma10": ma10, "ma50": ma50, "ma200": ma200, "rsi": rsi_v, "adx": adx_v,
         "uptrend": ma10 > ma50, "strong": strong,
@@ -469,15 +566,57 @@ def safe_analyse(ticker):
     except Exception:
         print(f"[scanner] {ticker} failed:")
         traceback.print_exc()
-        return {"ticker": ticker, "name": STOCKS[ticker], "error": True, "key": "HOLD", "live": False}
+        return {"ticker": ticker, "name": STOCKS[ticker], "error": True, "key": "HOLD", "live": False,
+                "sector": SECTOR.get(ticker, "Other")}
 
 
-def scan_all():
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        out = list(pool.map(safe_analyse, STOCKS))
-    for s in out:
-        s["group"] = "watch" if s["ticker"] in WATCHLIST else "popular"
-    return out
+_scan = {"at": 0.0, "out": None}
+scan_lock = threading.Lock()
+
+
+def scan_all(fresh=False):
+    """All 100 stocks: one batch download, then the signal rules on each. Remembered for 5 minutes."""
+    with scan_lock:
+        if not fresh and _scan["out"] and time.time() - _scan["at"] < CACHE_SECONDS:
+            return _scan["out"]
+        if fresh:
+            for t in STOCKS:
+                _cache.pop((t, "1y", "1d"), None)
+        prefetch_daily(list(STOCKS))
+        out = []
+        for t in STOCKS:
+            if t in _missing:
+                out.append({"ticker": t, "name": STOCKS[t], "error": True, "key": "HOLD", "live": False,
+                            "sector": SECTOR.get(t, "Other")})
+                continue
+            try:
+                s = analyse_stock(t, with_info=False)
+                s.pop("df", None)                      # keep the remembered list small
+                out.append(s)
+            except Exception:
+                print(f"[scanner] {t} failed:")
+                traceback.print_exc()
+                out.append({"ticker": t, "name": STOCKS[t], "error": True, "key": "HOLD", "live": False,
+                            "sector": SECTOR.get(t, "Other")})
+        for s in out:
+            s["group"] = "watch" if s["ticker"] in WATCHLIST else "popular"
+        _scan.update(at=time.time(), out=out)
+        return out
+
+
+def spark_svg(values, key, w=300, h=56):
+    """A tiny price line drawn as plain SVG — 100 of these load instantly (100 Plotly charts would not)."""
+    vals = [v for v in values if v is not None]
+    if len(vals) < 2:
+        return ""
+    lo, hi = min(vals), max(vals)
+    span = (hi - lo) or 1
+    vals = vals[::2] + ([vals[-1]] if len(vals) % 2 == 0 else [])      # every 2nd day is plenty for a thumbnail
+    pts = " ".join(f"{i * w / (len(vals) - 1):.0f},{h - 3 - (v - lo) / span * (h - 6):.1f}" for i, v in enumerate(vals))
+    color = {"BUY": "#3fb950", "SHORT": "#f85149"}.get(key, "#58a6ff")
+    return (f'<svg viewBox="0 0 {w} {h}" preserveAspectRatio="none" width="100%" height="{h}" aria-hidden="true">'
+            f'<polygon points="0,{h} {pts} {w},{h}" fill="{color}" fill-opacity=".08"/>'
+            f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>')
 
 
 def spark_json(values, key):
@@ -692,7 +831,11 @@ def new_practice():
 
 
 def practice_trade(uid, ticker, side, qty):
-    """Returns (ok, message)."""
+    """Returns (ok, message).
+    BUY / SELL   — own shares: profit when the price rises.
+    SHORT / COVER — short shares: profit when the price falls.
+    A short sets aside the sale value as a deposit (margin). On COVER you get the deposit back
+    plus the gain (entry − exit) × qty, or minus the loss if the price rose."""
     if ticker not in TRADABLE:
         return False, "Unknown stock."
     if qty < 1:
@@ -705,34 +848,55 @@ def practice_trade(uid, ticker, side, qty):
     name = TRADABLE[ticker]
     with trade_lock:                    # two quick clicks can't spend the same cash twice
         p = _load(practice_key(uid), new_practice())
+        p.setdefault("shorts", {})
         h = p["holdings"].get(ticker, {"qty": 0, "avg": 0.0})
-        if side == "BUY":
-            cost = round(qty * price, 2)
+        sh = p["shorts"].get(ticker, {"qty": 0, "avg": 0.0})
+        cost = round(qty * price, 2)
+        pnl = None
+        if side in ("BUY", "SHORT"):
+            if side == "BUY" and sh["qty"]:
+                return False, f"You’re short {sh['qty']} {name}. Use Cover to buy them back first."
+            if side == "SHORT" and h["qty"]:
+                return False, f"You own {h['qty']} {name}. Sell them before shorting — you can’t bet on both directions at once."
             if cost > p["cash"] + 0.01:
                 can = int(p["cash"] // price)
-                return False, f"Not enough virtual cash: {qty} × ₹{price:,.2f} = ₹{cost:,.0f}, but you have ₹{p['cash']:,.0f}. You can afford {can}."
-            h["avg"] = round((h["avg"] * h["qty"] + cost) / (h["qty"] + qty), 2)
-            h["qty"] += qty
+                need = "deposit" if side == "SHORT" else "cost"
+                return False, f"Not enough virtual cash: {qty} × ₹{price:,.2f} = ₹{cost:,.0f} {need}, but you have ₹{p['cash']:,.0f}. You can afford {can}."
+            pos = h if side == "BUY" else sh
+            pos["avg"] = round((pos["avg"] * pos["qty"] + cost) / (pos["qty"] + qty), 2)
+            pos["qty"] += qty
             p["cash"] = round(p["cash"] - cost, 2)
-            p["holdings"][ticker] = h
-            p["trades"].append({"time": stamp(), "ticker": ticker, "name": name, "side": "BUY",
-                                "qty": qty, "price": price, "pnl": None})
-            msg = f"Bought {qty} {name} at ₹{price:,.2f} (₹{cost:,.0f})."
+            (p["holdings"] if side == "BUY" else p["shorts"])[ticker] = pos
+            msg = (f"Bought {qty} {name} at ₹{price:,.2f} (₹{cost:,.0f})." if side == "BUY" else
+                   f"Shorted {qty} {name} at ₹{price:,.2f}. You profit if it falls below ₹{pos['avg']:,.2f} — ₹{cost:,.0f} is held as your deposit.")
         elif side == "SELL":
             if h["qty"] < qty:
-                return False, f"You only own {h['qty']} {name}."
+                return False, f"You only own {h['qty']} {name}." + (" (To bet on a fall, use Short.)" if not h["qty"] else "")
             pnl = round((price - h["avg"]) * qty, 2)
-            p["cash"] = round(p["cash"] + qty * price, 2)
+            p["cash"] = round(p["cash"] + cost, 2)
             h["qty"] -= qty
-            if h["qty"] == 0:
-                p["holdings"].pop(ticker, None)
-            else:
+            if h["qty"]:
                 p["holdings"][ticker] = h
-            p["trades"].append({"time": stamp(), "ticker": ticker, "name": name, "side": "SELL",
-                                "qty": qty, "price": price, "pnl": pnl})
+            else:
+                p["holdings"].pop(ticker, None)
             msg = f"Sold {qty} {name} at ₹{price:,.2f} — {'profit' if pnl >= 0 else 'loss'} of ₹{abs(pnl):,.0f}."
+        elif side == "COVER":
+            if sh["qty"] < qty:
+                return False, f"You’re only short {sh['qty']} {name}."
+            entry = sh["avg"]
+            pnl = round((entry - price) * qty, 2)
+            p["cash"] = round(p["cash"] + sh["avg"] * qty + pnl, 2)     # deposit back ± result
+            sh["qty"] -= qty
+            if sh["qty"]:
+                p["shorts"][ticker] = sh
+            else:
+                p["shorts"].pop(ticker, None)
+            msg = (f"Covered {qty} {name} at ₹{price:,.2f} — {'profit' if pnl >= 0 else 'loss'} of ₹{abs(pnl):,.0f} "
+                   f"(you shorted at ₹{entry:,.2f}, and it {'fell' if price < entry else 'rose' if price > entry else 'stayed level'}).")
         else:
-            return False, "Choose Buy or Sell."
+            return False, "Choose Buy, Sell, Short or Cover."
+        p["trades"].append({"time": stamp(), "ticker": ticker, "name": name, "side": side,
+                            "qty": qty, "price": price, "pnl": pnl})
         p["trades"] = p["trades"][-1000:]
         _save(practice_key(uid), p)
     return True, msg
@@ -741,21 +905,28 @@ def practice_trade(uid, ticker, side, qty):
 def practice_status(uid):
     p = _load(practice_key(uid), new_practice()) if uid else new_practice()
     rows, invested = [], 0.0
-    for t, h in p["holdings"].items():
-        price = last_price(t) or h["avg"]
-        value = round(h["qty"] * price, 2)
-        pnl = round((price - h["avg"]) * h["qty"], 2)
-        invested += value
-        rows.append({"ticker": t, "name": TRADABLE.get(t, t), "qty": h["qty"], "avg": h["avg"],
-                     "price": price, "value": value, "pnl": pnl,
-                     "pnl_pct": round((price / h["avg"] - 1) * 100, 2) if h["avg"] else 0})
+    for kind, book in (("LONG", p["holdings"]), ("SHORT", p.get("shorts", {}))):
+        for t, h in book.items():
+            price = last_price(t) or h["avg"]
+            if kind == "LONG":
+                pnl = round((price - h["avg"]) * h["qty"], 2)
+                value = round(h["qty"] * price, 2)
+                pct = round((price / h["avg"] - 1) * 100, 2) if h["avg"] else 0
+            else:                       # deposit + gain so far
+                pnl = round((h["avg"] - price) * h["qty"], 2)
+                value = round(h["qty"] * h["avg"] + pnl, 2)
+                pct = round((1 - price / h["avg"]) * 100, 2) if h["avg"] else 0
+            invested += value
+            rows.append({"ticker": t, "name": TRADABLE.get(t, t), "kind": kind, "qty": h["qty"], "avg": h["avg"],
+                         "price": price, "value": value, "pnl": pnl, "pnl_pct": pct})
     total = round(p["cash"] + invested, 2)
-    sells = [t for t in p["trades"] if t["side"] == "SELL"]
+    closes = [t for t in p["trades"] if t["side"] in ("SELL", "COVER")]
     return {"cash": p["cash"], "invested": round(invested, 2), "total": total,
             "pnl": round(total - START_CAPITAL, 2), "ret": round((total / START_CAPITAL - 1) * 100, 2),
             "rows": sorted(rows, key=lambda r: -r["value"]),
-            "holdings": {r["ticker"]: r for r in rows},
-            "win_rate": round(sum(1 for t in sells if t["pnl"] > 0) / len(sells) * 100) if sells else None,
+            "holdings": {r["ticker"]: r for r in rows if r["kind"] == "LONG"},
+            "shorts": {r["ticker"]: r for r in rows if r["kind"] == "SHORT"},
+            "win_rate": round(sum(1 for t in closes if t["pnl"] > 0) / len(closes) * 100) if closes else None,
             "n_trades": len(p["trades"]), "trades": list(reversed(p["trades"]))[:50]}
 
 
@@ -906,7 +1077,7 @@ def build_daily_summary(user):
     col = lambda x: green if x >= 0 else red
     sig_col = {"BUY": green, "SHORT": red}.get(sig["key"], "#24292f")
     rows_html = "".join(
-        f'<tr><td style="padding:8px 0;border-bottom:1px solid #eaeef2">{r["name"]}<br><span style="color:{muted};font-size:12px">{r["qty"]} × ₹{r["price"]:,.2f}</span></td>'
+        f'<tr><td style="padding:8px 0;border-bottom:1px solid #eaeef2">{r["name"]}{" <b style=\'color:#cf222e\'>(short)</b>" if r["kind"] == "SHORT" else ""}<br><span style="color:{muted};font-size:12px">{r["qty"]} × ₹{r["price"]:,.2f}</span></td>'
         f'<td align="right" style="padding:8px 0;border-bottom:1px solid #eaeef2">{_money(r["value"])}<br>'
         f'<span style="color:{col(r["pnl"])};font-size:12px">{_signed(r["pnl"])} ({r["pnl_pct"]:+.1f}%)</span></td></tr>'
         for r in p["rows"]) or f'<tr><td style="color:{muted};padding:8px 0">You don’t own anything yet — open TradeWise and make your first practice trade.</td></tr>'
@@ -931,7 +1102,7 @@ def build_daily_summary(user):
 <tr><td style="padding:0 24px 22px"><a href="{link}/practice" style="display:inline-block;background:#238636;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">Open TradeWise</a></td></tr>
 <tr><td style="padding:14px 24px;border-top:1px solid #eaeef2;font-size:12px;color:{muted}">Virtual money only. TradeWise is an educational tool, not financial advice. Turn these emails off in TradeWise → Settings.</td></tr>
 </table></td></tr></table></body></html>"""
-    holdings_txt = "\n".join(f"  • {r['name']}: {r['qty']} × ₹{r['price']:,.2f} = {_money(r['value'])}  ({_signed(r['pnl'])})" for r in p["rows"]) or "  (no holdings yet)"
+    holdings_txt = "\n".join(f"  • {r['name']}{' (short)' if r['kind'] == 'SHORT' else ''}: {r['qty']} × ₹{r['price']:,.2f} = {_money(r['value'])}  ({_signed(r['pnl'])})" for r in p["rows"]) or "  (no holdings yet)"
     text = (f"Hi {name},\n\nTradeWise daily summary — {datetime.now():%d %b %Y}\n\n"
             f"Practice portfolio: {_money(p['total'])}"
             + (f"  ({_signed(day_chg)} since last summary)" if day_chg is not None else "") + "\n"
@@ -1086,7 +1257,7 @@ def check_price_alerts():
 
 def check_stock_alerts():
     """Once an hour: which stocks just turned BUY/SHORT, and whose holdings made a big move."""
-    results = [s for s in scan_all() if not s["error"] and s.get("live")]
+    results = [s for s in scan_all() if not s["error"] and s.get("live") and s.get("price")]
     state = _load(STATE, {"last_signal": None, "history": []})
     prev = state.get("stock_signals", {})
     changes = {s["ticker"]: s for s in results
@@ -1105,7 +1276,8 @@ def check_stock_alerts():
     for user in all_users():
         uid, st = user["id"], get_settings(user["id"])
         raw = _load(practice_key(uid), new_practice())
-        held = raw["holdings"]
+        shorts = raw.get("shorts", {})
+        held = {**raw["holdings"], **shorts}
         lines = []
         # 1 · a stock turned BUY or SHORT
         if st["stock_alerts"] in ("owned", "all"):
@@ -1113,27 +1285,33 @@ def check_stock_alerts():
                 if st["stock_alerts"] == "all" or t in held:
                     word = "a <b>BUY</b> — all six conditions say it may rise" if s["key"] == "BUY" else "a <b>SHORT</b> — all six conditions say it may fall"
                     lines.append(f'<b>{s["name"]}</b> just turned {word}. Price ₹{s["price"]:,.2f}.'
-                                 + (" You own this stock." if t in held else ""))
+                                 + (" You’re short this stock." if t in shorts else " You own this stock." if t in held else ""))
         # 2 · a holding is up or down another N% from your average buy price
         levels = dict(raw.get("move_levels", {}))
         step = max(1, int(st.get("move_pct") or 5))
         for t, h in held.items():
             if t not in live_prices or not h["avg"]:
                 continue
-            pct = (live_prices[t] / h["avg"] - 1) * 100
+            is_short = t in shorts
+            pct = ((1 - live_prices[t] / h["avg"]) if is_short else (live_prices[t] / h["avg"] - 1)) * 100   # your gain in %
             level = int(pct / step) * step                 # 7.3% → 5, −11% → −10
             last = levels.get(t, 0)
             if st["move_alerts"] and level and (abs(level) > abs(last) or (level > 0) != (last > 0)):
-                pnl = (live_prices[t] - h["avg"]) * h["qty"]
-                lines.append(f'Your <b>{TRADABLE.get(t, t)}</b> is <b>{"up" if pct > 0 else "down"} {abs(pct):.1f}%</b> '
-                             f'from your average buy price (₹{h["avg"]:,.2f} → ₹{live_prices[t]:,.2f}). '
-                             f'That’s a {"profit" if pnl >= 0 else "loss"} of ₹{abs(pnl):,.0f} on {h["qty"]} share{"s" if h["qty"] != 1 else ""}.')
+                pnl = (h["avg"] - live_prices[t] if is_short else live_prices[t] - h["avg"]) * h["qty"]
+                if is_short:
+                    lines.append(f'Your <b>short</b> on <b>{TRADABLE.get(t, t)}</b> is <b>{"up" if pct > 0 else "down"} {abs(pct):.1f}%</b> — '
+                                 f'the price {"fell" if pct > 0 else "rose"} from ₹{h["avg"]:,.2f} to ₹{live_prices[t]:,.2f}. '
+                                 f'That’s a {"profit" if pnl >= 0 else "loss"} of ₹{abs(pnl):,.0f} on {h["qty"]} share{"s" if h["qty"] != 1 else ""}.')
+                else:
+                    lines.append(f'Your <b>{TRADABLE.get(t, t)}</b> is <b>{"up" if pct > 0 else "down"} {abs(pct):.1f}%</b> '
+                                 f'from your average buy price (₹{h["avg"]:,.2f} → ₹{live_prices[t]:,.2f}). '
+                                 f'That’s a {"profit" if pnl >= 0 else "loss"} of ₹{abs(pnl):,.0f} on {h["qty"]} share{"s" if h["qty"] != 1 else ""}.')
             levels[t] = level
         levels = {t: v for t, v in levels.items() if t in held}
         if levels != raw.get("move_levels", {}):
             with trade_lock:
                 fresh = _load(practice_key(uid), new_practice())
-                fresh["move_levels"] = {t: v for t, v in levels.items() if t in fresh["holdings"]}
+                fresh["move_levels"] = {t: v for t, v in levels.items() if t in fresh["holdings"] or t in fresh.get("shorts", {})}
                 _save(practice_key(uid), fresh)
         if lines and email_ready():
             ok, _ = send_alert_email(user, lines, "🔔 TradeWise: " + re.sub(r"<[^>]+>", "", lines[0])[:70])
@@ -1274,8 +1452,11 @@ MACROS = r"""
   {% else %}
   <div class="trade-meta">
     <div><span class="muted">Cash available</span><b class="num">₹{{ "{:,.0f}".format(cash) }}</b></div>
-    <div><span class="muted">You own</span><b class="num">{{ holding.qty if holding else 0 }}</b></div>
-    {% if holding %}<div><span class="muted">Your P&amp;L</span><b class="num">{{ signed(holding.pnl) }}</b></div>{% endif %}
+    {% set short = practice.shorts.get(ticker) if practice is defined and practice.shorts is defined else none %}
+    {% if short %}<div><span class="muted">You’re short</span><b class="num down">{{ short.qty }}</b></div>
+    <div><span class="muted">Short P&amp;L</span><b class="num">{{ signed(short.pnl) }}</b></div>
+    {% else %}<div><span class="muted">You own</span><b class="num">{{ holding.qty if holding else 0 }}</b></div>
+    {% if holding %}<div><span class="muted">Your P&amp;L</span><b class="num">{{ signed(holding.pnl) }}</b></div>{% endif %}{% endif %}
   </div>
   <form method="post" action="/trade" class="trade-form" data-price="{{ price }}">
     <input type="hidden" name="ticker" value="{{ ticker }}"><input type="hidden" name="next" value="{{ back }}">
@@ -1288,10 +1469,18 @@ MACROS = r"""
     </div>
     <div class="cost muted">Total: <b class="num">₹{{ "{:,.0f}".format(price) }}</b></div>
     <div class="trade-btns">
-      <button class="btn buy" name="side" value="BUY">Buy</button>
+      <button class="btn buy" name="side" value="BUY" {{ 'disabled title="Cover your short first"'|safe if short }}>Buy</button>
       <button class="btn sell" name="side" value="SELL" {{ 'disabled' if not holding }}>Sell</button>
     </div>
+    <div class="trade-btns short-btns">
+      <button class="btn shortb" name="side" value="SHORT" {{ 'disabled title="Sell what you own first"'|safe if holding }}>Short ↓</button>
+      <button class="btn coverb" name="side" value="COVER" {{ 'disabled' if not short }}>Cover</button>
+    </div>
   </form>
+  <details class="what"><summary>What is shorting?</summary>
+    <p>Shorting is a bet that the price will <b>fall</b>. You “sell” shares you don’t own, then <b>Cover</b> (buy them back) later. If the price dropped, you keep the difference. If it rose, you lose the difference. TradeWise holds the sale value as a deposit until you cover.</p>
+    <p>In India, ordinary investors can only short shares within the same trading day (or through futures). TradeWise lets you keep shorts open overnight so you can practise the idea.</p>
+  </details>
   <p class="hint">Trades use the latest price. Track results on the <a href="/practice">Practice</a> page.</p>
   {% set mine = my_alerts|selectattr('ticker', 'equalto', ticker)|list %}
   <details class="palert" {{ 'open' if mine }}><summary>🔔 Price alert{% if mine %} <span class="chip">{{ mine|length }} set</span>{% endif %}</summary>
@@ -1398,6 +1587,11 @@ td.r,th.r{text-align:right}
 .cost{font-size:.88rem;margin-top:8px}
 .trade-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .btn.buy{background:#238636}.btn.sell{background:#da3633}.btn.sell:hover{background:#f85149}
+.short-btns{margin-top:0}
+.btn.shortb{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1px #f8514988}.btn.shortb:hover{background:var(--red-bg);color:var(--red)}
+.btn.coverb{background:transparent;color:var(--green);box-shadow:inset 0 0 0 1px #2ea04388}.btn.coverb:hover{background:var(--green-bg);color:var(--green)}
+.what summary{cursor:pointer;font-size:.85rem;color:var(--blue)}
+.what p{font-size:.84rem;color:#c9d1d9;margin-top:6px}
 .hint{font-size:.8rem;color:var(--muted)}
 .palert{border-top:1px solid var(--line2);padding-top:10px}
 .palert summary{cursor:pointer;font-weight:600;font-size:.9rem}
@@ -1580,71 +1774,101 @@ setInterval(function(){
 
 STOCKS_T = r"""{% extends "base" %}{% block title %}Scanner{% endblock %}
 {% block css %}
-.summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search{flex:1 1 240px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 14px;font:inherit}
+.search:focus{outline:2px solid var(--blue);outline-offset:-1px}
+.sel{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px 10px;font:inherit;font-size:.9rem}
+.summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
 .filter{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 14px;font:500 .88rem Inter,sans-serif;cursor:pointer}
 .filter:hover{color:var(--text)} .filter.on{background:var(--panel2);color:var(--text);border-color:var(--muted)}
 .filter b{margin-left:4px;color:var(--text)}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
-.sc{display:flex;flex-direction:column;gap:12px}
+.shown{color:var(--muted);font-size:.85rem;margin-left:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.sc{display:flex;flex-direction:column;gap:10px;padding:16px}
 .sc.BUY{box-shadow:inset 0 3px 0 var(--green)} .sc.SHORT{box-shadow:inset 0 3px 0 var(--red)}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.nm{font-weight:700;font-size:1.05rem;color:var(--text)} .tk{color:var(--muted);font-size:.76rem}
-.pr{display:flex;align-items:baseline;gap:10px}.pr b{font-size:1.45rem}
+.nm{font-weight:700;font-size:1rem;color:var(--text)} .tk{color:var(--muted);font-size:.74rem}
+.star{color:var(--orange)}
+.pr{display:flex;align-items:baseline;gap:10px}.pr b{font-size:1.3rem}
 .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.mini div{background:var(--bg);border-radius:8px;padding:8px 4px;text-align:center}
-.mini .k{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.mini .v{font-weight:700;font-size:.9rem}
-.read{font-size:.84rem;color:#c9d1d9;list-style:none;display:grid;gap:3px}
-.read li::before{content:"•";color:var(--muted);margin-right:7px}
-.proj{display:flex;justify-content:space-between;font-size:.85rem;border-top:1px solid var(--line2);padding-top:10px}
+.mini div{background:var(--bg);border-radius:8px;padding:7px 4px;text-align:center}
+.mini .k{font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.mini .v{font-weight:700;font-size:.88rem}
+.proj{display:flex;justify-content:space-between;font-size:.83rem;border-top:1px solid var(--line2);padding-top:9px}
 .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto}
-.acts .btn{padding:9px 10px;font-size:.85rem}
-.err{color:var(--muted);font-size:.9rem}
+.acts .btn{padding:8px 10px;font-size:.84rem}
+.none{display:none;text-align:center;color:var(--muted);padding:30px}
+.failed{margin-top:16px;font-size:.84rem;color:var(--muted)}
 {% endblock %}
 {% block body %}
 <div class="page-h">
-  <div><h1>Stock Scanner</h1><p>{{ stocks|length }} Indian companies, checked with the same rules as the NIFTY signal. Pick any of them to practise trading.</p></div>
+  <div><h1>Stock Scanner</h1><p>{{ stocks|length + failed|length }} of India’s biggest companies, checked with the same rules as the NIFTY signal. Pick any of them to practise trading.</p></div>
   <a class="btn ghost" href="/stocks?fresh=1">↻ Rescan</a>
 </div>
-{% set counts = {'BUY':0,'HOLD':0,'SHORT':0} %}
+<div class="tools">
+  <input class="search" id="q" type="search" placeholder="Search a company — e.g. Tata, bank, Infosys…" aria-label="Search companies" autocomplete="off">
+  <select class="sel" id="sector" aria-label="Sector"><option value="">All sectors</option>{% for sec in sectors %}<option>{{ sec }}</option>{% endfor %}</select>
+  <select class="sel" id="sort" aria-label="Sort">
+    <option value="watch">Sort: Watchlist first</option><option value="name">Name A–Z</option>
+    <option value="chg-d">Today: biggest gain</option><option value="chg-a">Today: biggest fall</option>
+    <option value="m3-d">3 months: best</option><option value="m3-a">3 months: worst</option>
+    <option value="rsi-a">RSI: lowest (oversold)</option><option value="rsi-d">RSI: highest (overbought)</option>
+  </select>
+</div>
 <div class="summary">
   <button class="filter on" data-f="ALL">All <b>{{ stocks|length }}</b></button>
-  <button class="filter" data-f="watch">Watchlist <b>{{ stocks|selectattr('group','equalto','watch')|list|length }}</b></button>
-  <button class="filter" data-f="popular">Popular <b>{{ stocks|selectattr('group','equalto','popular')|list|length }}</b></button>
-  <span style="width:1px;background:var(--line);margin:0 4px"></span>
+  <button class="filter" data-f="watch">★ Watchlist <b>{{ stocks|selectattr('group','equalto','watch')|list|length }}</b></button>
+  <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
   {% for k in ['BUY','HOLD','SHORT'] %}<button class="filter" data-f="{{ k }}">{{ k|title }} <b>{{ stocks|selectattr('key','equalto',k)|list|length }}</b></button>{% endfor %}
-  <span class="muted" style="font-size:.84rem;align-self:center;margin-left:6px">Hover the dotted words for definitions</span>
+  <span class="shown" id="shown"></span>
 </div>
-<div class="cards">
+<div class="cards" id="cards">
 {% for s in stocks %}
-  <div class="card sc {{ s.key }}" data-k="{{ s.key }}" data-g="{{ s.group }}">
-    <div class="top"><div><a class="nm" href="/stock/{{ s.ticker }}">{{ s.name }}</a><div class="tk">{{ s.ticker }}</div></div>{% if not s.error %}<span class="pill {{ s.key }}">{{ s.key }}</span>{% endif %}</div>
-    {% if s.error %}
-      <p class="err">Couldn’t load this stock right now. Press <b>Rescan</b> in a minute — the other stocks are unaffected.</p>
-    {% else %}
-    <div class="pr"><b class="num">₹{{ "{:,.2f}".format(s.price) }}</b><span class="num {{ 'up' if s.chg_pct >= 0 else 'down' }}" style="font-size:.88rem">{{ '+' if s.chg_pct >= 0 }}{{ s.chg_pct }}%</span></div>
-    <div id="sp{{ loop.index }}"></div>
+  <div class="card sc {{ s.key }}" data-k="{{ s.key }}" data-g="{{ s.group }}" data-sec="{{ s.sector }}" data-i="{{ loop.index }}"
+       data-name="{{ s.name|lower }} {{ s.ticker|lower }}" data-chg="{{ s.chg_pct }}" data-m3="{{ s.m3 if s.m3 is not none else 0 }}" data-rsi="{{ s.rsi }}">
+    <div class="top"><div><a class="nm" href="/stock/{{ s.ticker }}">{% if s.group == 'watch' %}<span class="star" title="Watchlist">★ </span>{% endif %}{{ s.name }}</a><div class="tk">{{ s.ticker|replace('.NS','') }} · {{ s.sector }}</div></div><span class="pill {{ s.key }}">{{ s.key }}</span></div>
+    <div class="pr"><b class="num">₹{{ "{:,.2f}".format(s.price) }}</b><span class="num {{ 'up' if s.chg_pct >= 0 else 'down' }}" style="font-size:.86rem">{{ '+' if s.chg_pct >= 0 }}{{ s.chg_pct }}% today</span></div>
+    {{ spark_svg(s.spark, s.key)|safe }}
     <div class="mini">
       <div><div class="k">{{ m.term('RSI') }}</div><div class="v num {{ 'down' if s.rsi > 70 else 'up' if s.rsi < 30 }}">{{ s.rsi|round(0)|int }}</div></div>
       <div><div class="k">{{ m.term('ADX') }}</div><div class="v num {{ 'up' if s.strong else 'down' }}">{{ s.adx|round(0)|int }}</div></div>
-      <div><div class="k">{{ m.term('P/E') }}</div><div class="v num">{{ s.f.pe|round(0)|int if s.f.pe else '—' }}</div></div>
-      <div><div class="k">{{ m.term('ROE') }}</div><div class="v num">{{ (s.f.roe|round(0)|int ~ '%') if s.f.roe is not none else '—' }}</div></div>
+      <div><div class="k">1 month</div><div class="v num {{ 'up' if (s.m1 or 0) >= 0 else 'down' }}">{{ ('%+.1f'|format(s.m1) ~ '%') if s.m1 is not none else '—' }}</div></div>
+      <div><div class="k">3 months</div><div class="v num {{ 'up' if (s.m3 or 0) >= 0 else 'down' }}">{{ ('%+.1f'|format(s.m3) ~ '%') if s.m3 is not none else '—' }}</div></div>
     </div>
-    <ul class="read">{% for n in s.notes[:3] %}<li>{{ n }}</li>{% endfor %}</ul>
     <div class="proj"><span class="muted">3-month trend projection</span><span class="num {{ 'up' if s.p3.pct >= 0 else 'down' }}">₹{{ "{:,.0f}".format(s.p3.mid) }} ({{ '+' if s.p3.pct >= 0 }}{{ s.p3.pct }}%)</span></div>
-    {% endif %}
     <div class="acts"><a class="btn ghost" href="/stock/{{ s.ticker }}">Full analysis</a><a class="btn blue" href="/stock/{{ s.ticker }}#trade">Practise trade</a></div>
   </div>
 {% endfor %}
 </div>
+<div class="none" id="none">No companies match. Try a different search or filter.</div>
+{% if failed %}<p class="failed">Couldn’t load right now: {{ failed|map(attribute='name')|join(', ') }}. Press <b>Rescan</b> later — everything else is unaffected.</p>{% endif %}
 {% endblock %}
 {% block js %}<script>
-{% for s in stocks %}{% if not s.error %}plot('sp{{ loop.index }}', {{ spark_json(s.spark, s.key)|tojson }});
-{% endif %}{% endfor %}
-document.querySelectorAll('.filter').forEach(function(b){ b.onclick=function(){
-  document.querySelectorAll('.filter').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-  document.querySelectorAll('.sc').forEach(function(c){ var f=b.dataset.f; c.style.display = (f==='ALL'||c.dataset.k===f||c.dataset.g===f)?'':'none'; });
-};});
+(function(){
+  var cards=[].slice.call(document.querySelectorAll('.sc')), box=document.getElementById('cards');
+  var q=document.getElementById('q'), sec=document.getElementById('sector'), sort=document.getElementById('sort'), f='ALL';
+  function apply(){
+    var term=q.value.trim().toLowerCase(), s=sec.value, n=0;
+    cards.forEach(function(c){
+      var ok=(f==='ALL'||c.dataset.k===f||c.dataset.g===f) && (!s||c.dataset.sec===s) && (!term||c.dataset.name.indexOf(term)>-1||c.dataset.sec.toLowerCase().indexOf(term)>-1);
+      c.style.display=ok?'':'none'; if(ok) n++;
+    });
+    document.getElementById('shown').textContent='Showing '+n+' of '+cards.length;
+    document.getElementById('none').style.display=n?'none':'block';
+  }
+  function order(){
+    var v=sort.value, key=v.split('-')[0], dir=v.endsWith('-a')?1:-1;
+    cards.sort(function(a,b){
+      if(v==='watch') return (a.dataset.g==='watch'?0:1)-(b.dataset.g==='watch'?0:1) || a.dataset.i-b.dataset.i;
+      if(v==='name') return a.dataset.name.localeCompare(b.dataset.name);
+      return dir*(parseFloat(a.dataset[key])-parseFloat(b.dataset[key]));
+    }).forEach(function(c){ box.appendChild(c); });
+  }
+  document.querySelectorAll('.filter').forEach(function(b){ b.onclick=function(){
+    document.querySelectorAll('.filter').forEach(function(x){ x.classList.remove('on'); }); b.classList.add('on'); f=b.dataset.f; apply(); }; });
+  q.oninput=apply; sec.onchange=apply; sort.onchange=function(){ order(); apply(); };
+  apply();
+})();
 </script>{% endblock %}"""
 
 DETAIL = r"""{% extends "base" %}{% block title %}{{ s.name }}{% endblock %}
@@ -1769,7 +1993,7 @@ PRACTICE_T = r"""{% extends "base" %}{% block title %}Practice{% endblock %}
 <div class="page-h"><div><h1>{{ g.user.name.split()[0] if g.user.name.split() else 'Your' }}’s practice trading</h1><p>Learn by doing — with ₹1,00,000 of virtual money and zero real risk.</p></div></div>
 <div class="how">
   <div><b>1 · Pick something</b>Open the Dashboard (NIFTY 50) or any stock in the Scanner.</div>
-  <div><b>2 · Buy or sell</b>Use the <i>Practice trade</i> box. Choose a quantity and press Buy.</div>
+  <div><b>2 · Buy, sell or short</b>Use the <i>Practice trade</i> box. Buy if you think it will rise, Short if you think it will fall.</div>
   <div><b>3 · Track it here</b>Watch your profit or loss change with real market prices.</div>
 </div>
 <div class="tabs" role="tablist">
@@ -1782,20 +2006,21 @@ PRACTICE_T = r"""{% extends "base" %}{% block title %}Practice{% endblock %}
     <div class="card"><div class="k">Total value</div><div class="v num">₹{{ "{:,.0f}".format(p.total) }}</div></div>
     <div class="card"><div class="k">Profit / loss</div><div class="v num">{{ m.signed(p.pnl) }}</div><div class="num {{ 'up' if p.ret >= 0 else 'down' }}" style="font-size:.82rem">{{ '+' if p.ret >= 0 }}{{ p.ret }}%</div></div>
     <div class="card"><div class="k">Cash</div><div class="v num">₹{{ "{:,.0f}".format(p.cash) }}</div></div>
-    <div class="card"><div class="k">Invested</div><div class="v num">₹{{ "{:,.0f}".format(p.invested) }}</div>{% if p.win_rate is not none %}<div class="muted" style="font-size:.8rem">{{ p.win_rate }}% of your sales made a profit</div>{% endif %}</div>
+    <div class="card"><div class="k">Invested</div><div class="v num">₹{{ "{:,.0f}".format(p.invested) }}</div>{% if p.win_rate is not none %}<div class="muted" style="font-size:.8rem">{{ p.win_rate }}% of your closed trades made a profit</div>{% endif %}</div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
     <h2>What you own</h2>
     {% if p.rows %}
     <div style="overflow:auto"><table>
-      <thead><tr><th>Holding</th><th class="r">Qty</th><th class="r">Avg buy</th><th class="r">Now</th><th class="r">Value</th><th class="r">P&amp;L</th><th>Sell</th></tr></thead>
+      <thead><tr><th>Holding</th><th>Type</th><th class="r">Qty</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Value</th><th class="r">P&amp;L</th><th>Close</th></tr></thead>
       <tbody>{% for r in p.rows %}<tr>
         <td><a href="{{ '/' if r.ticker == '^NSEI' else '/stock/' ~ r.ticker }}" style="color:var(--text);font-weight:600">{{ r.name }}</a></td>
+        <td><span class="pill {{ 'BUY' if r.kind == 'LONG' else 'SHORT' }}" title="{{ 'Profits if the price rises' if r.kind == 'LONG' else 'Profits if the price falls' }}">{{ 'OWN' if r.kind == 'LONG' else 'SHORT' }}</span></td>
         <td class="num r">{{ r.qty }}</td><td class="num r">₹{{ "{:,.2f}".format(r.avg) }}</td><td class="num r">₹{{ "{:,.2f}".format(r.price) }}</td>
         <td class="num r">₹{{ "{:,.0f}".format(r.value) }}</td>
         <td class="num r">{{ m.signed(r.pnl) }} <span class="{{ 'up' if r.pnl_pct >= 0 else 'down' }}" style="font-size:.78rem">({{ '+' if r.pnl_pct >= 0 }}{{ r.pnl_pct }}%)</span></td>
-        <td><form class="sellf" method="post" action="/trade"><input type="hidden" name="ticker" value="{{ r.ticker }}"><input type="hidden" name="next" value="/practice"><input type="hidden" name="side" value="SELL"><input type="number" name="qty" min="1" max="{{ r.qty }}" value="{{ r.qty }}" aria-label="Quantity to sell"><button>Sell</button></form></td>
+        <td><form class="sellf" method="post" action="/trade"><input type="hidden" name="ticker" value="{{ r.ticker }}"><input type="hidden" name="next" value="/practice"><input type="hidden" name="side" value="{{ 'SELL' if r.kind == 'LONG' else 'COVER' }}"><input type="number" name="qty" min="1" max="{{ r.qty }}" value="{{ r.qty }}" aria-label="Quantity to close"><button {{ 'style="background:#238636"'|safe if r.kind == 'SHORT' }}>{{ 'Sell' if r.kind == 'LONG' else 'Cover' }}</button></form></td>
       </tr>{% endfor %}</tbody>
     </table></div>
     {% else %}
@@ -1811,7 +2036,7 @@ PRACTICE_T = r"""{% extends "base" %}{% block title %}Practice{% endblock %}
   <div class="card">
     <h2>Your trade history</h2>
     <div style="overflow:auto"><table><thead><tr><th>Time</th><th>Action</th><th>What</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Profit / loss</th></tr></thead><tbody>
-    {% for t in p.trades %}<tr><td>{{ t.time }}</td><td><span class="pill {{ 'BUY' if t.side == 'BUY' else 'SHORT' }}">{{ t.side }}</span></td><td>{{ t.name }}</td><td class="num r">{{ t.qty }}</td><td class="num r">₹{{ "{:,.2f}".format(t.price) }}</td><td class="num r">{{ m.signed(t.pnl) if t.pnl is not none else '—' }}</td></tr>
+    {% for t in p.trades %}<tr><td>{{ t.time }}</td><td><span class="pill {{ 'BUY' if t.side in ('BUY', 'COVER') else 'SHORT' }}">{{ t.side }}</span></td><td>{{ t.name }}</td><td class="num r">{{ t.qty }}</td><td class="num r">₹{{ "{:,.2f}".format(t.price) }}</td><td class="num r">{{ m.signed(t.pnl) if t.pnl is not none else '—' }}</td></tr>
     {% else %}<tr><td colspan="6" class="muted">No trades yet.</td></tr>{% endfor %}
     </tbody></table></div>
     <form method="post" action="/practice/reset" onsubmit="return confirm('Start over with ₹1,00,000? This deletes all your practice trades.')" style="margin-top:14px"><button class="btn ghost">Start over</button></form>
@@ -1920,7 +2145,7 @@ select.inp{padding:8px 10px}
       <div class="tog"><div><b>NIFTY 50 signal</b><span>When the market signal turns BUY or SHORT.</span></div>
         <label class="switch"><input type="checkbox" name="signal_alerts" {{ 'checked' if st.signal_alerts }}><span class="slider"></span></label></div>
       <div class="tog"><div><b>Stock signals</b><span>When a stock turns BUY or SHORT (checked hourly).</span></div>
-        <select class="inp" name="stock_alerts" style="width:auto">{% for v, l in [('off','Off'),('owned','Stocks I own'),('all','All 11 stocks')] %}<option value="{{ v }}" {{ 'selected' if st.stock_alerts == v }}>{{ l }}</option>{% endfor %}</select></div>
+        <select class="inp" name="stock_alerts" style="width:auto">{% for v, l in [('off','Off'),('owned','Stocks I own'),('all','All 100 stocks')] %}<option value="{{ v }}" {{ 'selected' if st.stock_alerts == v }}>{{ l }}</option>{% endfor %}</select></div>
       <div class="tog"><div><b>Big moves in my holdings</b><span>When something you own is up or down another
         <select name="move_pct" class="mini" aria-label="Percent step">{% for v in [3,5,10] %}<option value="{{ v }}" {{ 'selected' if st.move_pct == v }}>{{ v }}%</option>{% endfor %}</select> from your buy price.</span></div>
         <label class="switch"><input type="checkbox" name="move_alerts" {{ 'checked' if st.move_alerts }}><span class="slider"></span></label></div>
@@ -2075,6 +2300,8 @@ TOPICS = [
      "ROE of 18% means ₹18 of profit for every ₹100 shareholders have invested."),
     ("BUY, HOLD, SHORT", "BUY means conditions suggest prices may rise. SHORT means they suggest prices may fall — a short trade profits when prices drop. HOLD means the picture is unclear, so the safest choice is to wait.",
      "TradeWise only says BUY or SHORT when all six conditions agree."),
+    ("Short selling", "A way to profit when you think a price will fall. You sell shares first (borrowed from your broker), then buy them back later — called covering. If the price fell, you bought back cheaper and keep the difference. If it rose, you lose the difference, and in theory there’s no limit to how high a price can go. In India, retail investors can only short shares intraday (within the same day) or through futures.",
+     "Short 10 shares at ₹1,000. Cover at ₹920 → profit ₹800. Cover at ₹1,050 instead → loss ₹500."),
     ("Paper trading", "Practising with pretend money in real market conditions. Professional traders always paper-trade a strategy before risking real money. Use the Practice page to try it.",
      "Buy 2 units of NIFTY 50 with virtual cash today and watch your profit or loss change tomorrow."),
     ("Projections", "The projection lines on stock pages simply continue the recent average daily move. Markets react to news nobody can predict, so treat them as “if nothing changes” scenarios.",
@@ -2084,7 +2311,7 @@ TOPICS = [
 app.jinja_loader = DictLoader({"macros": MACROS, "base": BASE, "home": HOME, "stocks": STOCKS_T,
                                "detail": DETAIL, "practice": PRACTICE_T, "learn": LEARN_T, "error": ERROR_T,
                                "settings": SETTINGS_T, "auth": AUTH_T})
-app.jinja_env.globals.update(spark_json=spark_json, icons=ICONS, glossary=GLOSSARY)
+app.jinja_env.globals.update(spark_json=spark_json, spark_svg=spark_svg, icons=ICONS, glossary=GLOSSARY)
 
 
 @app.context_processor
@@ -2302,12 +2529,10 @@ def refresh():
 
 @app.route("/stocks")
 def stocks():
-    if request.args.get("fresh"):
-        for t in STOCKS:
-            _cache.pop((t, "1y", "1d"), None)
-    results = scan_all()
-    return render_template("stocks", active="stocks", stocks=results,
-                           live=all(s.get("live") for s in results if not s["error"]))
+    results = scan_all(fresh=bool(request.args.get("fresh")))
+    ok = [s for s in results if not s["error"]]
+    return render_template("stocks", active="stocks", stocks=ok, failed=[s for s in results if s["error"]],
+                           sectors=list(_SECTORS), live=all(s.get("live") for s in ok) if ok else False)
 
 
 @app.route("/stock/<ticker>")
@@ -2336,7 +2561,7 @@ def trade():
 def practice():
     price = last_price("^NSEI")
     return render_template("practice", active="practice", p=practice_status(_uid()), a=algo_status(price),
-                           stocks=STOCKS, admin=is_admin(g.user))
+                           stocks=FEATURED, admin=is_admin(g.user))
 
 
 @app.route("/portfolio")
