@@ -61,7 +61,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # SETTINGS
 # ════════════════════════════════════════════════════════════════
 PORT = 5050                       # 5000 is used by your personal project / AirPlay
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tradewise_data")
+DATA_DIR = os.environ.get("TRADEWISE_DATA_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "tradewise_data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Online mode: set automatically on Render (RENDER=true) — or force it with TRADEWISE_CLOUD=1
@@ -280,6 +280,55 @@ def prefetch_daily(tickers):
             print(f"[data] no data for: {', '.join(missing)}")
 
 
+def _row(df, *names):
+    """Values of the first matching row in a yearly statement, newest year first."""
+    if df is None or getattr(df, "empty", True):
+        return []
+    for n in names:
+        if n in df.index:
+            return [float(v) for v in pd.to_numeric(df.loc[n], errors="coerce").dropna().values]
+    return []
+
+
+def _info_from_statements(ticker):
+    """Backup for business numbers: work them out from the company's yearly results.
+    Yahoo's ready-made summary often refuses cloud servers, but the statements usually still load."""
+    t = yf.Ticker(ticker)
+    with yf_lock:
+        inc, bal, divs = t.income_stmt, t.balance_sheet, t.dividends
+    price = last_price(ticker)
+    ni = _row(inc, "Net Income", "Net Income Common Stockholders")
+    rev = _row(inc, "Total Revenue", "Operating Revenue")
+    eps = _row(inc, "Diluted EPS", "Basic EPS")
+    equity = _row(bal, "Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest")
+    debt = _row(bal, "Total Debt")
+    shares = _row(bal, "Ordinary Shares Number", "Share Issued")
+    out = {}
+    e = eps[0] if eps else (ni[0] / shares[0] if ni and shares and shares[0] else None)
+    if e:
+        out["trailingEps"] = e
+        if e > 0 and price:
+            out["trailingPE"] = price / e
+    if ni and equity and equity[0] > 0:
+        out["returnOnEquity"] = ni[0] / equity[0]
+    if debt and equity and equity[0] > 0:
+        out["debtToEquity"] = debt[0] / equity[0] * 100          # same % scale Yahoo uses
+    if equity and shares and shares[0] and price:
+        out["priceToBook"] = price / (equity[0] / shares[0])
+    if len(rev) > 1 and rev[1]:
+        out["revenueGrowth"] = rev[0] / rev[1] - 1
+    if len(ni) > 1 and ni[1] > 0:
+        out["earningsGrowth"] = ni[0] / ni[1] - 1
+    if shares and price:
+        out["marketCap"] = shares[0] * price
+    if divs is not None and len(divs) and price:
+        cutoff = pd.Timestamp.now(tz=divs.index.tz) - pd.Timedelta(days=365)
+        out["dividendYield"] = float(divs[divs.index >= cutoff].sum()) / price * 100   # % per year
+    if out:
+        out["_source"] = "statements"
+    return out
+
+
 def fetch_info(ticker):
     key = ("info", ticker)
     hit = _cache.get(key)
@@ -287,8 +336,15 @@ def fetch_info(ticker):
         return hit[1]
     try:
         info = yf.Ticker(ticker).info or {}
-    except Exception:
+    except Exception as e:
+        print(f"[info] {ticker}: Yahoo summary unavailable ({type(e).__name__}) — trying yearly results")
         info = {}
+    has_numbers = any(isinstance(info.get(k), (int, float)) for k in ("trailingPE", "returnOnEquity", "marketCap"))
+    if not has_numbers:
+        try:
+            info = {**_info_from_statements(ticker), **{k: v for k, v in info.items() if v is not None}}
+        except Exception as e:
+            print(f"[info] {ticker}: yearly results unavailable too ({type(e).__name__})")
     _cache[key] = (time.time(), info)
     return info
 
@@ -309,7 +365,9 @@ def rsi(close, n=14):
     gain = delta.clip(lower=0).ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
     rs = gain / loss.replace(0, np.nan)
-    return (100 - 100 / (1 + rs)).fillna(50)
+    out = 100 - 100 / (1 + rs)
+    out[(loss == 0) & (gain > 0)] = 100.0      # only rises → fully overbought (was wrongly shown as 50)
+    return out.fillna(50)                       # not enough data yet, or no movement → neutral
 
 
 def adx(df, n=14):
@@ -447,7 +505,7 @@ def _dark(fig, height):
     fig.update_layout(
         height=height, margin=dict(l=8, r=8, t=8, b=8),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
-        font=dict(color="#c9d1d9", family="Inter, Arial, sans-serif", size=11),
+        font=dict(color="#c9d1d9", family="DM Sans, Arial, sans-serif", size=11),
         xaxis=dict(gridcolor="#21262d", rangeslider=dict(visible=False)),
         yaxis=dict(gridcolor="#21262d", side="right"),
         legend=dict(orientation="h", y=1.02, x=0, bgcolor="rgba(0,0,0,0)"),
@@ -524,6 +582,7 @@ def analyse_stock(ticker, with_info=True):
         "target": r2(num("targetMeanPrice")),
         "rec": (info.get("recommendationKey") or "").replace("_", " ").upper() or None,
         "upside": None,
+        "source": info.get("_source"),
     }
     if f["target"]:
         f["upside"] = round((f["target"] / price - 1) * 100, 1)
@@ -1512,15 +1571,18 @@ BASE = r"""{% import "macros" as m with context %}<!doctype html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TradeWise">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400..700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2128;--line:#30363d;--line2:#21262d;
 --text:#e6edf3;--muted:#8b949e;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--orange:#f0883e;
---green-bg:#12261b;--red-bg:#2d1416;--blue-bg:#132033}
+--green-bg:#12261b;--red-bg:#2d1416;--blue-bg:#132033;
+--font-body:"DM Sans",Arial,sans-serif;--font-display:"Plus Jakarta Sans","DM Sans",Arial,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;line-height:1.5;font-size:15px}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.55;font-size:15px}
+/* type: Plus Jakarta Sans for headings and big numbers-in-words, DM Sans for reading, JetBrains Mono for prices */
+h1,.brand,.sig-word,.nm,.trade-name,.auth h1{font-family:var(--font-display)}
 a{color:var(--blue);text-decoration:none}
 .num{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 /* nav */
@@ -1535,7 +1597,7 @@ nav.top{padding-top:env(safe-area-inset-top);position:sticky;top:0;z-index:20;ba
 .links a.active svg{color:var(--blue)}
 .nav-sig{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.85rem;color:var(--muted)}
 .tabbar{display:none}
-.install{display:none;align-items:center;gap:6px;background:var(--blue-bg);color:var(--blue);border:1px solid #1f6feb55;border-radius:9px;padding:6px 11px;font:600 .82rem Inter,sans-serif;cursor:pointer}
+.install{display:none;align-items:center;gap:6px;background:var(--blue-bg);color:var(--blue);border:1px solid #1f6feb55;border-radius:9px;padding:6px 11px;font:600 .82rem var(--font-body);cursor:pointer}
 .install.show{display:inline-flex}
 .me{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:600;font-size:.88rem}
 .ava{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--blue));color:#0d1117;display:grid;place-items:center;font-weight:800}
@@ -1551,7 +1613,7 @@ nav.top{padding-top:env(safe-area-inset-top);position:sticky;top:0;z-index:20;ba
 .toast.ok{background:#12261b;border:1px solid #2ea043;color:#aff5b4}.toast.err{background:#2d1416;border:1px solid #f85149;color:#ffc1bb}
 @keyframes drop{from{opacity:0;transform:translate(-50%,-10px)}}@keyframes fade{to{opacity:0;visibility:hidden}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
-h1{font-size:1.6rem;letter-spacing:-.02em;line-height:1.2}
+h1{font-size:2rem;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:12px}
 .muted{color:var(--muted)}
 .chip{font-size:.72rem;background:var(--blue-bg);color:var(--blue);padding:3px 9px;border-radius:999px;font-weight:600}
@@ -1571,7 +1633,7 @@ td.r,th.r{text-align:right}
 .btn.blue{background:#1f6feb}.btn.blue:hover{background:#388bfd}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .term{border-bottom:1px dotted var(--muted);cursor:help;position:relative}
-.term:hover::after,.term:focus::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 6px);width:240px;background:#262c36;border:1px solid var(--line);color:var(--text);font:400 .8rem/1.4 Inter,sans-serif;text-transform:none;letter-spacing:0;padding:8px 10px;border-radius:8px;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.term:hover::after,.term:focus::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 6px);width:240px;background:#262c36;border:1px solid var(--line);color:var(--text);font:400 .8rem/1.4 var(--font-body);text-transform:none;letter-spacing:0;padding:8px 10px;border-radius:8px;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.4)}
 /* trade panel */
 .trade{display:flex;flex-direction:column;gap:12px}
 .trade-h{display:flex;justify-content:space-between;align-items:center}
@@ -1599,7 +1661,7 @@ td.r,th.r{text-align:right}
 .pa-in{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px 9px;font:inherit;font-size:.88rem}
 input.pa-in{width:110px}
 .arow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;font-size:.86rem;margin-top:8px}
-.x{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font:600 .75rem Inter,sans-serif;cursor:pointer}.x:hover{color:var(--red);border-color:var(--red)}
+.x{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font:600 .75rem var(--font-body);cursor:pointer}.x:hover{color:var(--red);border-color:var(--red)}
 footer{border-top:1px solid var(--line2);color:var(--muted);font-size:.8rem;text-align:center;padding:20px}
 @media(max-width:760px){
   .links,.nav-sig{display:none}
@@ -1608,9 +1670,11 @@ footer{border-top:1px solid var(--line2);color:var(--muted);font-size:.8rem;text
   .tabbar a{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:.7rem;font-weight:500;padding:4px}
   .tabbar a.active{color:var(--blue)}
   body{padding-bottom:70px}
-  .wrap{padding:18px 14px 40px} h1{font-size:1.35rem} .card{padding:16px}
+  .wrap{padding:18px 14px 40px} h1{font-size:1.6rem} .card{padding:16px}
 }
 {% block css %}{% endblock %}
+/* square look: no rounded corners anywhere on the site */
+*,*::before,*::after{border-radius:0!important}
 </style></head>
 <body>
 {% set nav = [('home','/','Dashboard'),('stocks','/stocks','Scanner'),('practice','/practice','Practice'),('learn','/learn','Learn'),('settings','/settings','Settings')] %}
@@ -1666,7 +1730,7 @@ HOME = r"""{% extends "base" %}{% block title %}Dashboard{% endblock %}
 .signal.SHORT{background:linear-gradient(160deg,#41191b,#2d1416);border:2px solid var(--red)}
 .signal.HOLD{background:var(--panel2);border:2px solid #6e7681}
 .sig-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.sig-word{font-size:3.2rem;font-weight:800;letter-spacing:.01em;line-height:1}
+.sig-word{font-size:3.6rem;font-weight:800;letter-spacing:-.04em;line-height:.95}
 .signal.BUY .sig-word{color:var(--green)} .signal.SHORT .sig-word{color:var(--red)} .signal.HOLD .sig-word{color:#e6edf3}
 .score{text-align:right}.score b{font-size:1.5rem}
 .meter{display:flex;gap:4px}.meter span{flex:1;height:6px;border-radius:3px;background:#30363d}
@@ -1704,7 +1768,7 @@ details p{color:var(--muted);font-size:.85rem;margin-top:6px}
     <div>
       <h2>NIFTY 50 · India’s top 50 companies</h2>
       <div class="price num">₹{{ "{:,.2f}".format(s.price) }}</div>
-      <div class="num" style="margin-top:4px">{{ m.signed(s.change, 2) }} <span class="{{ 'up' if s.change_pct >= 0 else 'down' }}">({{ '+' if s.change_pct >= 0 }}{{ s.change_pct }}%)</span> <span class="muted" style="font-family:Inter;font-size:.88rem">vs yesterday</span></div>
+      <div class="num" style="margin-top:4px">{{ m.signed(s.change, 2) }} <span class="{{ 'up' if s.change_pct >= 0 else 'down' }}">({{ '+' if s.change_pct >= 0 }}{{ s.change_pct }}%)</span> <span class="muted" style="font-family:var(--font-body);font-size:.88rem">vs yesterday</span></div>
     </div>
     <div class="muted" style="font-size:.82rem">Updated {{ s.updated }} IST · checks automatically every hour, Mon–Fri 9:20–15:20</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1779,7 +1843,7 @@ STOCKS_T = r"""{% extends "base" %}{% block title %}Scanner{% endblock %}
 .search:focus{outline:2px solid var(--blue);outline-offset:-1px}
 .sel{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px 10px;font:inherit;font-size:.9rem}
 .summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
-.filter{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 14px;font:500 .88rem Inter,sans-serif;cursor:pointer}
+.filter{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 14px;font:500 .88rem var(--font-body);cursor:pointer}
 .filter:hover{color:var(--text)} .filter.on{background:var(--panel2);color:var(--text);border-color:var(--muted)}
 .filter b{margin-left:4px;color:var(--text)}
 .shown{color:var(--muted);font-size:.85rem;margin-left:auto}
@@ -1932,7 +1996,8 @@ DETAIL = r"""{% extends "base" %}{% block title %}{{ s.name }}{% endblock %}
           <div><div class="k">Dividend</div><div class="v num">{{ (f.div ~ '%') if f.div is not none else '—' }}</div><div class="m">yearly payout</div></div>
           <div><div class="k">Mkt cap</div><div class="v num" style="font-size:.85rem">{{ ("₹{:,.0f} Cr".format(f.mcap_cr)) if f.mcap_cr else '—' }}</div><div class="m">company size</div></div>
         </div>
-        {% if not f.pe and f.roe is none %}<p class="muted" style="font-size:.8rem;margin-top:10px">Business numbers are unavailable right now (they come from Yahoo Finance).</p>{% endif %}
+        {% if not f.pe and f.roe is none %}<p class="muted" style="font-size:.8rem;margin-top:10px">Business numbers are unavailable right now (they come from Yahoo Finance).</p>
+        {% elif f.source == 'statements' %}<p class="muted" style="font-size:.8rem;margin-top:10px">Worked out from the company’s latest yearly results (Yahoo Finance). Analyst forecasts aren’t available right now.</p>{% endif %}
       </div>
     </div>
   </div>
@@ -1971,7 +2036,7 @@ PRACTICE_T = r"""{% extends "base" %}{% block title %}Practice{% endblock %}
 .how div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:.86rem;color:var(--muted)}
 .how b{display:block;color:var(--text);font-size:.92rem;margin-bottom:2px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
-.tab{background:none;border:0;color:var(--muted);font:600 .92rem Inter,sans-serif;padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab{background:none;border:0;color:var(--muted);font:600 .92rem var(--font-body);padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab.on{color:var(--text);border-color:var(--blue)}
 .pane{display:none}.pane.on{display:block}
 .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
@@ -1986,7 +2051,7 @@ PRACTICE_T = r"""{% extends "base" %}{% block title %}Practice{% endblock %}
 .pos.none{background:var(--panel);border:1px dashed var(--line);color:var(--muted)}
 .sellf{display:inline-flex;gap:6px;align-items:center}
 .sellf input{width:64px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:5px 8px;text-align:center}
-.sellf button{background:#da3633;color:#fff;border:0;border-radius:7px;padding:6px 10px;font:600 .8rem Inter,sans-serif;cursor:pointer}
+.sellf button{background:#da3633;color:#fff;border:0;border-radius:7px;padding:6px 10px;font:600 .8rem var(--font-body);cursor:pointer}
 @media(max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}.how{grid-template-columns:1fr}}
 {% endblock %}
 {% block body %}
@@ -2123,7 +2188,7 @@ code{font-family:"JetBrains Mono",monospace;background:var(--bg);border:1px soli
 select.inp{padding:8px 10px}
 .alist{display:grid;gap:6px;margin-top:8px}
 .arow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;font-size:.86rem}
-.x{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font:600 .75rem Inter,sans-serif;cursor:pointer}.x:hover{color:var(--red);border-color:var(--red)}
+.x{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font:600 .75rem var(--font-body);cursor:pointer}.x:hover{color:var(--red);border-color:var(--red)}
 @media(max-width:860px){.set{grid-template-columns:1fr}}
 {% endblock %}
 {% block body %}
@@ -2233,7 +2298,7 @@ AUTH_T = r"""{% extends "base" %}{% block title %}{{ heading }}{% endblock %}
 .alt{text-align:center;margin-top:16px;font-size:.9rem;color:var(--muted)}
 .perks{display:grid;gap:6px;margin:0 0 18px;font-size:.88rem;color:#c9d1d9;list-style:none}
 .perks li::before{content:"✓ ";color:var(--green);font-weight:700}
-.pw{position:relative}.pw button{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);font:600 .78rem Inter,sans-serif;cursor:pointer;padding:4px 6px}
+.pw{position:relative}.pw button{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);font:600 .78rem var(--font-body);cursor:pointer;padding:4px 6px}
 {% endblock %}
 {% block body %}
 <div class="auth card">
